@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#2563eb">
+<title>パートカレンダー</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+    background: #f3f4f6;
+    color: #111827;
+    font-size: 14px;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 8px 10px;
+    padding-top: calc(8px + env(safe-area-inset-top));
+    display: flex; align-items: center; gap: 6px;
+  }
+  header h1 { margin: 0; font-size: 16px; flex: 1; text-align: center; }
+  button {
+    font: inherit; background: #fff; color: #111827;
+    border: 1px solid #d1d5db; border-radius: 8px;
+    padding: 8px 12px; cursor: pointer; min-height: 36px;
+  }
+  button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+  button.danger  { background: #ef4444; color: #fff; border-color: #ef4444; }
+  button.ghost   { background: transparent; border: none; padding: 6px 10px; }
+  button:active { opacity: .85; }
+
+  .calendar {
+    display: grid; grid-template-columns: repeat(7, 1fr);
+    gap: 1px; background: #e5e7eb; border-bottom: 1px solid #e5e7eb;
+  }
+  .dow {
+    background: #f9fafb; text-align: center;
+    padding: 6px 0; font-size: 12px; color: #6b7280;
+  }
+  .dow.sun { color: #dc2626; }
+  .dow.sat { color: #2563eb; }
+  .day {
+    background: #fff; min-height: 84px; padding: 4px;
+    overflow: hidden; position: relative;
+  }
+  .day.other { background: #fafafa; color: #d1d5db; }
+  .day.today .date-num {
+    background: #2563eb; color: #fff; border-radius: 999px;
+    padding: 1px 7px;
+  }
+  .day .date-num { font-weight: 600; font-size: 12px; }
+  .day.sun .date-num { color: #dc2626; }
+  .day.sat .date-num { color: #2563eb; }
+  .day.today.sun .date-num, .day.today.sat .date-num { color: #fff; }
+  .day .names { margin-top: 2px; line-height: 1.35; }
+  .chip {
+    display: inline-block; font-size: 10px;
+    background: #dbeafe; color: #1d4ed8;
+    border-radius: 4px; padding: 1px 4px;
+    margin: 1px 2px 1px 0;
+  }
+  .chip.off { background: #fee2e2; color: #b91c1c; text-decoration: line-through; }
+  .memo-mark { position: absolute; top: 2px; right: 4px; color: #f59e0b; font-size: 12px; }
+
+  .empty-hint {
+    text-align: center; color: #6b7280; padding: 20px;
+  }
+  .empty-hint button { margin-top: 8px; }
+
+  /* Modal */
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    display: none; align-items: flex-end; justify-content: center;
+    z-index: 100;
+  }
+  .modal-bg.show { display: flex; }
+  .modal {
+    background: #fff; width: 100%; max-width: 520px;
+    max-height: 92vh; border-radius: 14px 14px 0 0;
+    padding: 16px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+    overflow-y: auto;
+  }
+  .modal h2 { margin: 0 0 8px; font-size: 16px; }
+  .modal .helper { font-size: 12px; color: #6b7280; margin: 4px 0 10px; }
+  .modal textarea, .modal input[type=text] {
+    width: 100%; font: inherit; padding: 10px;
+    border: 1px solid #d1d5db; border-radius: 8px;
+    background: #fff;
+  }
+  .modal textarea { min-height: 140px; resize: vertical; }
+  .modal .actions {
+    display: flex; gap: 8px; justify-content: flex-end;
+    margin-top: 14px; flex-wrap: wrap;
+  }
+  .row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 0; border-bottom: 1px solid #f3f4f6;
+  }
+  .row:last-child { border-bottom: none; }
+  .row .label { flex: 1; font-weight: 500; }
+  .seg {
+    display: inline-flex; border: 1px solid #d1d5db;
+    border-radius: 8px; overflow: hidden;
+  }
+  .seg button {
+    border: none; border-radius: 0; padding: 6px 10px;
+    background: #fff; min-height: 32px; font-size: 13px;
+  }
+  .seg button.active { background: #2563eb; color: #fff; }
+  .seg.off-mode button.active { background: #ef4444; }
+
+  .menu-list { display: grid; gap: 8px; margin: 8px 0 4px; }
+  .menu-list button { width: 100%; text-align: left; padding: 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <button class="ghost" id="prev-month" aria-label="前の月">‹</button>
+  <h1 id="month-label">―</h1>
+  <button class="ghost" id="next-month" aria-label="次の月">›</button>
+  <button class="ghost" id="today-btn">今日</button>
+  <button class="ghost" id="open-menu" aria-label="メニュー">≡</button>
+</header>
+
+<main>
+  <div class="calendar" id="calendar"></div>
+  <div class="empty-hint" id="empty-hint" style="display:none">
+    まずパートさんを登録してください。
+    <br><button class="primary" id="empty-register">パートを登録する</button>
+  </div>
+</main>
+
+<!-- 日詳細 -->
+<div class="modal-bg" id="day-modal">
+  <div class="modal">
+    <h2 id="day-modal-title">―</h2>
+    <div id="day-staff-list"></div>
+    <div style="margin-top:12px;">
+      <div class="label">メモ／要望</div>
+      <div class="helper">例：「たきたさんはこの日休み」「やまだ午後だけ」など自由記入</div>
+      <textarea id="day-memo" placeholder=""></textarea>
+    </div>
+    <div class="actions">
+      <button id="day-close">閉じる</button>
+      <button class="primary" id="day-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- メニュー -->
+<div class="modal-bg" id="menu-modal">
+  <div class="modal">
+    <h2>メニュー</h2>
+    <div class="menu-list">
+      <button id="open-staff">パート登録</button>
+      <button id="open-paste">LINEテキストから一括取り込み</button>
+      <button id="open-data">バックアップ／復元</button>
+    </div>
+    <div class="actions">
+      <button id="menu-close">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- パート登録 -->
+<div class="modal-bg" id="staff-modal">
+  <div class="modal">
+    <h2>パート登録</h2>
+    <div class="helper">名前を一行ずつ。同じ名前はそのまま残ります。</div>
+    <textarea id="staff-text" placeholder="たきた&#10;やまだ&#10;さとう"></textarea>
+    <div class="actions">
+      <button id="staff-close">閉じる</button>
+      <button class="primary" id="staff-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 一括取り込み -->
+<div class="modal-bg" id="paste-modal">
+  <div class="modal">
+    <h2>LINEテキストから取り込み</h2>
+    <div class="helper">
+      日付＋名前の行を貼り付けてください。例：<br>
+      <code>5/10 たきた</code> ／ <code>5月12日 やまだ 休み</code> ／ <code>5/15-5/18 さとう</code> ／ <code>3,4,8,9 たきた</code>
+    </div>
+    <div class="row">
+      <div class="label">既定の種別</div>
+      <div class="seg" id="paste-kind">
+        <button data-kind="working" class="active">出勤</button>
+        <button data-kind="off">休み</button>
+      </div>
+    </div>
+    <div class="helper">行に「休」「出勤」が含まれていればそちらを優先します。</div>
+    <textarea id="paste-text" placeholder="例：&#10;5/10 たきた&#10;5/12-5/14 やまだ 休み&#10;3,4,8 さとう"></textarea>
+    <div class="actions">
+      <button id="paste-close">閉じる</button>
+      <button class="primary" id="paste-apply">読み込む</button>
+    </div>
+  </div>
+</div>
+
+<!-- バックアップ -->
+<div class="modal-bg" id="data-modal">
+  <div class="modal">
+    <h2>バックアップ／復元</h2>
+    <div class="helper">
+      データはこの端末のブラウザに保存されています。<br>
+      下のテキストをコピーして自分宛のLINEやメモに貼り付ければバックアップできます。<br>
+      別の端末に貼り戻して「復元」を押せば移せます。
+    </div>
+    <textarea id="data-text"></textarea>
+    <div class="actions">
+      <button class="danger" id="data-clear">全消去</button>
+      <button id="data-close">閉じる</button>
+      <button class="primary" id="data-load">この内容で復元</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const STORAGE_KEY = "part-calendar-v1";
+
+let state = loadState() || { staff: [], days: {} };
+let viewYear, viewMonth; // month is 0-indexed
+let pasteKind = "working";
+let editingDayKey = null;
+
+// ---------- storage ----------
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw);
+    if (!v || !Array.isArray(v.staff) || typeof v.days !== "object") return null;
+    return v;
+  } catch { return null; }
+}
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+// ---------- helpers ----------
+function pad2(n) { return String(n).padStart(2, "0"); }
+function dateKey(y, m, d) { return `${y}-${pad2(m+1)}-${pad2(d)}`; }
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+  }[c]));
+}
+function newId() { return "s" + Math.random().toString(36).slice(2, 9); }
+function lastDayOfMonth(y, m) { return new Date(y, m+1, 0).getDate(); }
+
+// ---------- render ----------
+function render() {
+  document.getElementById("month-label").textContent = `${viewYear}年${viewMonth+1}月`;
+  document.getElementById("empty-hint").style.display = state.staff.length === 0 ? "block" : "none";
+
+  const cal = document.getElementById("calendar");
+  cal.innerHTML = "";
+  const dows = ["日","月","火","水","木","金","土"];
+  dows.forEach((d, i) => {
+    const el = document.createElement("div");
+    el.className = "dow" + (i===0?" sun":"") + (i===6?" sat":"");
+    el.textContent = d;
+    cal.appendChild(el);
+  });
+
+  const startDow = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = lastDayOfMonth(viewYear, viewMonth);
+  const today = new Date();
+  const todayKey = dateKey(today.getFullYear(), today.getMonth(), today.getDate());
+
+  // leading blanks
+  for (let i = 0; i < startDow; i++) {
+    const el = document.createElement("div");
+    el.className = "day other";
+    cal.appendChild(el);
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dow = (startDow + d - 1) % 7;
+    const k = dateKey(viewYear, viewMonth, d);
+    const el = document.createElement("div");
+    el.className = "day"
+      + (dow===0?" sun":"") + (dow===6?" sat":"")
+      + (k === todayKey ? " today" : "");
+    const day = state.days[k] || {};
+    let html = `<div class="date-num">${d}</div><div class="names">`;
+    for (const sid of (day.working || [])) {
+      const s = state.staff.find(x => x.id === sid);
+      if (s) html += `<span class="chip">${escapeHtml(s.name)}</span>`;
+    }
+    for (const sid of (day.off || [])) {
+      const s = state.staff.find(x => x.id === sid);
+      if (s) html += `<span class="chip off">${escapeHtml(s.name)}</span>`;
+    }
+    html += "</div>";
+    if (day.memo) html += `<span class="memo-mark" title="${escapeHtml(day.memo)}">★</span>`;
+    el.innerHTML = html;
+    el.addEventListener("click", () => openDayModal(k));
+    cal.appendChild(el);
+  }
+}
+
+// ---------- modal helpers ----------
+function showModal(id) { document.getElementById(id).classList.add("show"); }
+function hideModal(id) { document.getElementById(id).classList.remove("show"); }
+document.querySelectorAll(".modal-bg").forEach(bg => {
+  bg.addEventListener("click", e => { if (e.target === bg) bg.classList.remove("show"); });
+});
+
+// ---------- day modal ----------
+function openDayModal(k) {
+  if (state.staff.length === 0) {
+    showModal("staff-modal");
+    document.getElementById("staff-text").value = "";
+    return;
+  }
+  editingDayKey = k;
+  const [y, m, d] = k.split("-").map(Number);
+  const dows = ["日","月","火","水","木","金","土"];
+  const dow = new Date(y, m-1, d).getDay();
+  document.getElementById("day-modal-title").textContent = `${y}/${m}/${d}（${dows[dow]}）`;
+  const day = state.days[k] || {};
+  const wrap = document.getElementById("day-staff-list");
+  wrap.innerHTML = "";
+  for (const s of state.staff) {
+    const status = (day.working || []).includes(s.id) ? "working"
+                 : (day.off || []).includes(s.id) ? "off" : "none";
+    const row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML = `
+      <div class="label">${escapeHtml(s.name)}</div>
+      <div class="seg" data-staff="${s.id}">
+        <button data-status="none"   class="${status==="none"?"active":""}">―</button>
+        <button data-status="working" class="${status==="working"?"active":""}">出</button>
+        <button data-status="off"    class="${status==="off"?"active":""}">休</button>
+      </div>
+    `;
+    row.querySelectorAll("button").forEach(b => {
+      b.addEventListener("click", () => {
+        row.querySelectorAll("button").forEach(x => x.classList.remove("active"));
+        b.classList.add("active");
+      });
+    });
+    wrap.appendChild(row);
+  }
+  document.getElementById("day-memo").value = day.memo || "";
+  showModal("day-modal");
+}
+document.getElementById("day-close").addEventListener("click", () => hideModal("day-modal"));
+document.getElementById("day-save").addEventListener("click", () => {
+  const day = { working: [], off: [] };
+  document.querySelectorAll("#day-staff-list .seg").forEach(seg => {
+    const sid = seg.dataset.staff;
+    const active = seg.querySelector("button.active");
+    const status = active ? active.dataset.status : "none";
+    if (status === "working") day.working.push(sid);
+    if (status === "off") day.off.push(sid);
+  });
+  const memo = document.getElementById("day-memo").value.trim();
+  if (memo) day.memo = memo;
+  if (day.working.length === 0 && day.off.length === 0 && !day.memo) {
+    delete state.days[editingDayKey];
+  } else {
+    state.days[editingDayKey] = day;
+  }
+  saveState();
+  render();
+  hideModal("day-modal");
+});
+
+// ---------- menu / staff ----------
+document.getElementById("open-menu").addEventListener("click", () => showModal("menu-modal"));
+document.getElementById("menu-close").addEventListener("click", () => hideModal("menu-modal"));
+document.getElementById("today-btn").addEventListener("click", () => {
+  const t = new Date(); viewYear = t.getFullYear(); viewMonth = t.getMonth(); render();
+});
+document.getElementById("prev-month").addEventListener("click", () => {
+  viewMonth--; if (viewMonth < 0) { viewMonth = 11; viewYear--; } render();
+});
+document.getElementById("next-month").addEventListener("click", () => {
+  viewMonth++; if (viewMonth > 11) { viewMonth = 0; viewYear++; } render();
+});
+
+function openStaffModal() {
+  document.getElementById("staff-text").value = state.staff.map(s => s.name).join("\n");
+  hideModal("menu-modal");
+  showModal("staff-modal");
+}
+document.getElementById("open-staff").addEventListener("click", openStaffModal);
+document.getElementById("empty-register").addEventListener("click", openStaffModal);
+document.getElementById("staff-close").addEventListener("click", () => hideModal("staff-modal"));
+document.getElementById("staff-save").addEventListener("click", () => {
+  const lines = document.getElementById("staff-text").value
+    .split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const byName = new Map(state.staff.map(s => [s.name, s]));
+  state.staff = lines.map(name => byName.get(name) || { id: newId(), name });
+  saveState();
+  render();
+  hideModal("staff-modal");
+});
+
+// ---------- paste / parse ----------
+document.querySelectorAll("#paste-kind button").forEach(b => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll("#paste-kind button").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    pasteKind = b.dataset.kind;
+    document.getElementById("paste-kind").classList.toggle("off-mode", pasteKind === "off");
+  });
+});
+document.getElementById("open-paste").addEventListener("click", () => {
+  if (state.staff.length === 0) {
+    alert("先にパートを登録してください。");
+    hideModal("menu-modal");
+    openStaffModal();
+    return;
+  }
+  document.getElementById("paste-text").value = "";
+  hideModal("menu-modal");
+  showModal("paste-modal");
+});
+document.getElementById("paste-close").addEventListener("click", () => hideModal("paste-modal"));
+document.getElementById("paste-apply").addEventListener("click", () => {
+  const text = document.getElementById("paste-text").value;
+  const r = parsePasteText(text, viewYear, viewMonth);
+  saveState();
+  render();
+  let msg = `取り込み: ${r.applied}件`;
+  if (r.unrecognized.length) {
+    msg += `\n認識できなかった行: ${r.unrecognized.length}件`;
+    msg += "\n（先頭5件）\n" + r.unrecognized.slice(0,5).join("\n");
+    msg += "\n\n→ カレンダーの日付をタップして手動で追加できます。";
+  }
+  alert(msg);
+  hideModal("paste-modal");
+});
+
+function parsePasteText(text, defaultYear, defaultMonth) {
+  let applied = 0;
+  const unrecognized = [];
+  const lines = String(text || "").split(/\r?\n/);
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+
+    let dates = [];
+    let remainder = line;
+
+    // 1) range: 5/10-5/15, 5月10日〜15日, 10〜15日
+    const rangeRe = /(?:(\d{1,2})[\/月])?(\d{1,2})日?\s*[〜~\-－―]\s*(?:(\d{1,2})[\/月])?(\d{1,2})日?/;
+    const rm = remainder.match(rangeRe);
+    if (rm) {
+      const sM = rm[1] ? +rm[1] - 1 : defaultMonth;
+      const sD = +rm[2];
+      const eM = rm[3] ? +rm[3] - 1 : sM;
+      const eD = +rm[4];
+      for (let mm = sM; mm <= eM; mm++) {
+        const from = (mm === sM) ? sD : 1;
+        const lastD = lastDayOfMonth(defaultYear, mm);
+        const to = (mm === eM) ? eD : lastD;
+        for (let d = from; d <= to; d++) {
+          if (d >= 1 && d <= lastD) dates.push({ y: defaultYear, m: mm, d });
+        }
+      }
+      remainder = remainder.replace(rm[0], " ").trim();
+    } else {
+      // 2) explicit M/D or M月D日 or D日 tokens
+      const tokenRe = /(\d{1,2})[\/月](\d{1,2})日?|(\d{1,2})日/g;
+      const matched = [];
+      let mt;
+      let lastMonth = defaultMonth;
+      while ((mt = tokenRe.exec(remainder)) !== null) {
+        if (mt[1]) {
+          lastMonth = +mt[1] - 1;
+          dates.push({ y: defaultYear, m: lastMonth, d: +mt[2] });
+        } else if (mt[3]) {
+          dates.push({ y: defaultYear, m: lastMonth, d: +mt[3] });
+        }
+        matched.push(mt[0]);
+      }
+      // 3) bare numbers fallback (e.g. "3,4,8,9 たきた") only if no 月 / と not a range
+      if (dates.length === 0 && !/月|\//.test(remainder)) {
+        const numRe = /\b(\d{1,2})\b/g;
+        let nm;
+        while ((nm = numRe.exec(remainder)) !== null) {
+          const n = +nm[1];
+          const lastD = lastDayOfMonth(defaultYear, defaultMonth);
+          if (n >= 1 && n <= lastD) {
+            dates.push({ y: defaultYear, m: defaultMonth, d: n });
+            matched.push(nm[0]);
+          }
+        }
+      }
+      for (const t of matched) remainder = remainder.split(t).join(" ");
+      remainder = remainder.trim();
+    }
+
+    if (dates.length === 0) { unrecognized.push(line); continue; }
+
+    // determine kind
+    const kind = /休/.test(remainder) ? "off"
+               : /出勤|出/.test(remainder) ? "working"
+               : pasteKind;
+
+    // find matching staff by substring; longest names first to avoid partial overlap
+    const sorted = [...state.staff].sort((a,b) => b.name.length - a.name.length);
+    const matchedStaff = [];
+    let scan = remainder;
+    for (const s of sorted) {
+      if (scan.includes(s.name)) {
+        matchedStaff.push(s);
+        scan = scan.split(s.name).join(" ");
+      }
+    }
+    if (matchedStaff.length === 0) { unrecognized.push(line); continue; }
+
+    for (const dt of dates) {
+      const k = dateKey(dt.y, dt.m, dt.d);
+      const day = state.days[k] || { working: [], off: [] };
+      day.working = day.working || [];
+      day.off = day.off || [];
+      const opp = kind === "working" ? "off" : "working";
+      for (const s of matchedStaff) {
+        day[opp] = day[opp].filter(x => x !== s.id);
+        if (!day[kind].includes(s.id)) day[kind].push(s.id);
+      }
+      state.days[k] = day;
+      applied++;
+    }
+  }
+  return { applied, unrecognized };
+}
+
+// ---------- backup / restore ----------
+document.getElementById("open-data").addEventListener("click", () => {
+  document.getElementById("data-text").value = JSON.stringify(state, null, 2);
+  hideModal("menu-modal");
+  showModal("data-modal");
+});
+document.getElementById("data-close").addEventListener("click", () => hideModal("data-modal"));
+document.getElementById("data-load").addEventListener("click", () => {
+  let next;
+  try { next = JSON.parse(document.getElementById("data-text").value); }
+  catch { alert("JSONとして読めませんでした。"); return; }
+  if (!next || !Array.isArray(next.staff) || typeof next.days !== "object") {
+    alert("形式が違います。"); return;
+  }
+  if (!confirm("現在のデータを上書きします。よろしいですか？")) return;
+  state = next;
+  saveState();
+  render();
+  hideModal("data-modal");
+});
+document.getElementById("data-clear").addEventListener("click", () => {
+  if (!confirm("全データを消します。元に戻せません。よろしいですか？")) return;
+  state = { staff: [], days: {} };
+  saveState();
+  render();
+  hideModal("data-modal");
+});
+
+// ---------- init ----------
+(function init() {
+  const t = new Date();
+  viewYear = t.getFullYear();
+  viewMonth = t.getMonth();
+  render();
+})();
+</script>
+</body>
+</html>
